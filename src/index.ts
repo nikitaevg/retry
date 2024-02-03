@@ -13,6 +13,7 @@ const OUTPUT_EXIT_ERROR_KEY = 'exit_error';
 
 let exit: number;
 let done: boolean;
+let output: string[] = [];
 
 function getExecutable(inputs: Inputs): string {
   if (!inputs.shell) {
@@ -73,6 +74,7 @@ async function runCmd(attempt: number, inputs: Inputs) {
 
   exit = 0;
   done = false;
+  output = [];
   let timeout = false;
 
   debug(`Running command ${inputs.command} on ${OS} using shell ${executable}`);
@@ -83,9 +85,11 @@ async function runCmd(attempt: number, inputs: Inputs) {
 
   child.stdout?.on('data', (data) => {
     process.stdout.write(data);
+    output.push(data);
   });
   child.stderr?.on('data', (data) => {
     process.stdout.write(data);
+    output.push(data);
   });
 
   child.on('exit', (code, signal) => {
@@ -148,6 +152,11 @@ async function runAction(inputs: Inputs) {
       } else if (exit > 0 && inputs.retry_on === 'timeout') {
         // error: error
         throw error;
+      } else if (
+        inputs.outputs_to_consider_flake &&
+        !hasFlakyOutput(inputs.outputs_to_consider_flake)
+      ) {
+        throw error;
       } else {
         await runRetryCmd(inputs);
         if (inputs.warning_on_retry) {
@@ -158,6 +167,10 @@ async function runAction(inputs: Inputs) {
       }
     }
   }
+}
+
+function hasFlakyOutput(outputs_to_consider_flake: string[]): boolean {
+  return outputs_to_consider_flake.some((flakeOutput) => output.includes(flakeOutput));
 }
 
 const inputs = getInputs();

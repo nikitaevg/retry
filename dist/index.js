@@ -24904,6 +24904,7 @@ var OUTPUT_EXIT_CODE_KEY = 'exit_code';
 var OUTPUT_EXIT_ERROR_KEY = 'exit_error';
 var exit;
 var done;
+var output = [];
 function getExecutable(inputs) {
     if (!inputs.shell) {
         return OS === 'win32' ? 'powershell' : 'bash';
@@ -24975,6 +24976,7 @@ function runCmd(attempt, inputs) {
                     executable = getExecutable(inputs);
                     exit = 0;
                     done = false;
+                    output = [];
                     timeout = false;
                     (0, core_1.debug)("Running command ".concat(inputs.command, " on ").concat(OS, " using shell ").concat(executable));
                     child = attempt > 1 && inputs.new_command_on_retry
@@ -24982,9 +24984,11 @@ function runCmd(attempt, inputs) {
                         : (0, child_process_1.spawn)(inputs.command, { shell: executable });
                     (_a = child.stdout) === null || _a === void 0 ? void 0 : _a.on('data', function (data) {
                         process.stdout.write(data);
+                        output.push(data);
                     });
                     (_b = child.stderr) === null || _b === void 0 ? void 0 : _b.on('data', function (data) {
                         process.stdout.write(data);
+                        output.push(data);
                     });
                     child.on('exit', function (code, signal) {
                         (0, core_1.debug)("Code: ".concat(code));
@@ -25040,17 +25044,17 @@ function runAction(inputs) {
                     attempt = 1;
                     _a.label = 2;
                 case 2:
-                    if (!(attempt <= inputs.max_attempts)) return [3 /*break*/, 13];
+                    if (!(attempt <= inputs.max_attempts)) return [3 /*break*/, 14];
                     _a.label = 3;
                 case 3:
-                    _a.trys.push([3, 5, , 12]);
+                    _a.trys.push([3, 5, , 13]);
                     // just keep overwriting attempts output
                     (0, core_1.setOutput)(OUTPUT_TOTAL_ATTEMPTS_KEY, attempt);
                     return [4 /*yield*/, runCmd(attempt, inputs)];
                 case 4:
                     _a.sent();
                     (0, core_1.info)("Command completed after ".concat(attempt, " attempt(s)."));
-                    return [3 /*break*/, 13];
+                    return [3 /*break*/, 14];
                 case 5:
                     error_2 = _a.sent();
                     if (!(attempt === inputs.max_attempts)) return [3 /*break*/, 6];
@@ -25066,8 +25070,12 @@ function runAction(inputs) {
                     if (!(exit > 0 && inputs.retry_on === 'timeout')) return [3 /*break*/, 9];
                     // error: error
                     throw error_2;
-                case 9: return [4 /*yield*/, runRetryCmd(inputs)];
-                case 10:
+                case 9:
+                    if (!(inputs.outputs_to_consider_flake &&
+                        !hasFlakyOutput(inputs.outputs_to_consider_flake))) return [3 /*break*/, 10];
+                    throw error_2;
+                case 10: return [4 /*yield*/, runRetryCmd(inputs)];
+                case 11:
                     _a.sent();
                     if (inputs.warning_on_retry) {
                         (0, core_1.warning)("Attempt ".concat(attempt, " failed. Reason: ").concat(error_2.message));
@@ -25075,15 +25083,18 @@ function runAction(inputs) {
                     else {
                         (0, core_1.info)("Attempt ".concat(attempt, " failed. Reason: ").concat(error_2.message));
                     }
-                    _a.label = 11;
-                case 11: return [3 /*break*/, 12];
-                case 12:
+                    _a.label = 12;
+                case 12: return [3 /*break*/, 13];
+                case 13:
                     attempt++;
                     return [3 /*break*/, 2];
-                case 13: return [2 /*return*/];
+                case 14: return [2 /*return*/];
             }
         });
     });
+}
+function hasFlakyOutput(outputs_to_consider_flake) {
+    return outputs_to_consider_flake.some(function (flakeOutput) { return output.includes(flakeOutput); });
 }
 var inputs = (0, inputs_1.getInputs)();
 runAction(inputs)
@@ -25216,6 +25227,7 @@ function getInputs() {
     var continue_on_error = getInputBoolean('continue_on_error');
     var new_command_on_retry = (0, core_1.getInput)('new_command_on_retry');
     var retry_on_exit_code = getInputNumber('retry_on_exit_code', false);
+    var outputs_to_consider_flake = (0, core_1.getMultilineInput)('outputs_to_consider_flake');
     return {
         timeout_minutes: timeout_minutes,
         timeout_seconds: timeout_seconds,
@@ -25230,6 +25242,7 @@ function getInputs() {
         continue_on_error: continue_on_error,
         new_command_on_retry: new_command_on_retry,
         retry_on_exit_code: retry_on_exit_code,
+        outputs_to_consider_flake: outputs_to_consider_flake,
     };
 }
 exports.getInputs = getInputs;
